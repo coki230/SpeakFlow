@@ -1,11 +1,10 @@
 from flask import Flask, request, jsonify, render_template
-import os
-import io
-import wave
-import sounddevice as sd
-import numpy as np
 import threading
 import time
+import os
+import shutil
+import voice_util as vu
+
 
 app = Flask(__name__)
 
@@ -15,25 +14,50 @@ def index():
 
 
 @app.route('/send-audio', methods=['POST'])
-def send_audio():
-    try:
-        if 'audio' not in request.files:
-            return jsonify({'error': 'No audio file provided'}), 400
+def upload_file():
+    if 'audio' not in request.files:
+        return jsonify({"error": "No file part"}), 400
 
-        audio_file = request.files['audio']
+    file = request.files['audio']
+    # # Save the file
+    # file_path = "temp_audio.webm"
+    # file.save(file_path)
 
-        # Save the audio to a temporary file
-        filename = "temp_audio.webm"
-        audio_file.save(filename)
+    text = vu.audio_to_text(file)
+    print(text)
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
 
-        # Process and play the audio using sounddevice
-        play_audio_async(filename)
 
-        return jsonify({'message': 'Audio received and played successfully'}), 200
+    return jsonify({"message": "File saved successfully", "text": text}), 200
 
-    except Exception as e:
-        print(f"Error processing audio: {str(e)}")
-        return jsonify({'error': 'Failed to process audio'}), 500
+# @app.route('/send-audio', methods=['POST'])
+# def send_audio():
+#     try:
+#         if 'audio' not in request.files:
+#             return jsonify({'error': 'No audio file provided'}), 400
+#
+#         audio_file = request.files['audio']
+#
+#         # read to mem
+#         audio_data = audio_file.read()
+#
+#         text = vu.audio_to_text(audio_data)
+#         print(text)
+#
+#         # Save the audio to a temporary file
+#         filename = "temp_audio.mp3"
+#         audio_file.save(filename)
+#
+#         # Process and play the audio using sounddevice
+#         play_audio_async(filename)
+#
+#         return jsonify({'message': 'Audio received and played successfully'}), 200
+#
+#     except Exception as e:
+#         print(e)
+#         print(f"Error processing audio: {str(e)}")
+#         return jsonify({'error': 'Failed to process audio'}), 500
 
 
 def play_audio_async(filename):

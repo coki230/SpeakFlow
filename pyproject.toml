@@ -2,10 +2,13 @@
 name = "speakflow"
 version = "0.1.0"
 description = "Add your description here"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "flask>=3.1.2",
-    "numpy>=2.4.0",
+    "numpy>=2.2.6",
+    "openai-whisper>=20250625",
+    "pydub>=0.25.1",
+    "scipy>=1.15.3",
     "sounddevice>=0.5.3",
 ]
 
