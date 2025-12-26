@@ -3,6 +3,9 @@ import numpy as np
 from pydub import AudioSegment
 from io import BytesIO
 import traceback
+import edge_tts
+import base64
+import io
 # import os
 # os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -75,3 +78,23 @@ class VoiceUtil:
         full_text = outputs[0]['generated_text']
         response = full_text.split("<|assistant|>")[-1].strip()
         return response
+
+    async def get_bot_audio_base64(self, text, voice="en-US-GuyNeural"):
+        # 1. 初始化 edge-tts
+        communicate = edge_tts.Communicate(text, voice)
+
+        # 2. 创建一个内存字节流容器
+        audio_buffer = io.BytesIO()
+
+        # 3. 将生成的音频块写入容器
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_buffer.write(chunk["data"])
+
+        # 4. 获取完整的字节数据
+        bot_audio_bytes = audio_buffer.getvalue()
+
+        # 5. 转化为 Base64 字符串
+        bot_audio_base64 = base64.b64encode(bot_audio_bytes).decode('utf-8')
+
+        return bot_audio_base64
