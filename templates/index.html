@@ -2,41 +2,40 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AI Voice Assistant</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            background: #ffffff; /* 移除背景渐变，改为纯白 */
+            height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
         }
 
         .container {
             width: 100%;
             max-width: 600px;
+            height: 95vh; /* 提高高度到 95% 视口高度 */
             background: #ffffff;
-            border-radius: 20px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
             display: flex;
             flex-direction: column;
-            height: 80vh;
             overflow: hidden;
+            /* 手机端稍微留一点顶部余量，或者直接 100vh */
         }
 
         .header {
             background: #182848;
             color: white;
-            padding: 20px;
+            padding: 15px;
             text-align: center;
+            flex-shrink: 0;
         }
 
-        /* 聊天区域 */
+        /* 聊天区域 - 核心：由于容器变高，这里会自动撑开 */
         .chat-container {
             flex: 1;
             padding: 20px;
@@ -48,7 +47,7 @@
         }
 
         .message {
-            max-width: 80%;
+            max-width: 85%;
             padding: 12px 16px;
             border-radius: 15px;
             font-size: 15px;
@@ -62,7 +61,6 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* 机器人消息：靠左 */
         .bot-message {
             align-self: flex-start;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -70,7 +68,6 @@
             border-bottom-left-radius: 2px;
         }
 
-        /* 用户消息：靠右 */
         .user-message {
             align-self: flex-end;
             background: #182848;
@@ -88,9 +85,11 @@
         /* 控制区域 */
         .controls {
             padding: 20px;
+            padding-bottom: 30px; /* 增加底部间距适配手机手势区 */
             background: white;
             border-top: 1px solid #eee;
             text-align: center;
+            flex-shrink: 0;
         }
 
         .mic-button {
@@ -156,6 +155,7 @@
 <audio id="audioPlayer"></audio>
 
 <script>
+    // ... 这里保持你原来的 JavaScript 代码逻辑不变 ...
     let mediaRecorder;
     let audioChunks = [];
     const micBtn = document.getElementById('micBtn');
@@ -163,51 +163,37 @@
     const chatContainer = document.getElementById('chatContainer');
     const audioPlayer = document.getElementById('audioPlayer');
 
-    // 1. 添加消息到界面
     function addMessage(sender, text) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${sender}-message`;
-
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        msgDiv.innerHTML = `
-            ${text}
-            <span class="timestamp">${sender === 'user' ? 'You' : 'AI'} · ${time}</span>
-        `;
-
+        msgDiv.innerHTML = `${text}<span class="timestamp">${sender === 'user' ? 'You' : 'AI'} · ${time}</span>`;
         chatContainer.appendChild(msgDiv);
-        // 自动滚动到底部
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
-    // 2. 录音逻辑
     micBtn.onclick = async () => {
         if (mediaRecorder && mediaRecorder.state === "recording") {
             mediaRecorder.stop();
             return;
         }
-
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             audioChunks = [];
-
             mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-
             mediaRecorder.onstart = () => {
                 micBtn.classList.add('recording');
                 micBtn.textContent = '⏹️';
                 status.textContent = "Recording...";
             };
-
             mediaRecorder.onstop = async () => {
                 micBtn.classList.remove('recording');
                 micBtn.textContent = '🎤';
                 status.textContent = "Processing...";
-
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 await sendToServer(audioBlob);
             };
-
             mediaRecorder.start();
         } catch (err) {
             console.error("Mic error:", err);
@@ -215,51 +201,27 @@
         }
     };
 
-    // 3. 发送数据到后端
     async function sendToServer(blob) {
         const formData = new FormData();
         formData.append('audio', blob, 'user_voice.webm');
-
         try {
-            const response = await fetch('/send-audio', {
-                method: 'POST',
-                body: formData
-            });
-
+            const response = await fetch('/send-audio', { method: 'POST', body: formData });
             if (!response.ok) throw new Error("Server error");
-
             const data = await response.json();
-
-            // 显示识别出的用户文字
-            if (data.user_text) {
-                addMessage('user', data.user_text);
-            }
-
-            // 显示 AI 的回答文字
-            if (data.bot_text) {
-                addMessage('bot', data.bot_text);
-            }
-
-            // 播放 AI 的回答声音
-            if (data.audio_base64) {
-                playAudio(data.audio_base64);
-            }
-
+            if (data.user_text) addMessage('user', data.user_text);
+            if (data.bot_text) addMessage('bot', data.bot_text);
+            if (data.audio_base64) playAudio(data.audio_base64);
             status.textContent = "Ready";
-
         } catch (err) {
-            console.error("Fetch error:", err);
             status.textContent = "Error occurred";
             addMessage('bot', "Sorry, I couldn't process that voice message.");
         }
     }
 
-    // 4. 播放 Base64 音频
     function playAudio(base64Data) {
-        // 如果后端传来的不带前缀，手动补上
         const source = base64Data.startsWith('data:') ? base64Data : `data:audio/wav;base64,${base64Data}`;
         audioPlayer.src = source;
-        audioPlayer.play().catch(e => console.log("Auto-play blocked or failed", e));
+        audioPlayer.play().catch(e => console.log("Auto-play blocked", e));
     }
 </script>
 
