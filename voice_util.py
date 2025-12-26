@@ -20,7 +20,7 @@ def audio_to_text(file_path):
         # wavfile.write("debug_after_process.wav", 16000, samples)
 
         result = model.transcribe(audio=samples, language='en')
-        return result
+        return result['text']
     except Exception as e:
         print(traceback.format_exc())
         print(f"语音识别错误: {str(e)}")

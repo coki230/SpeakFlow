@@ -29,7 +29,7 @@ def upload_file():
         return jsonify({"error": "No selected file"}), 400
 
 
-    return jsonify({"message": "File saved successfully", "text": text}), 200
+    return jsonify({"message": text}), 200
 
 # @app.route('/send-audio', methods=['POST'])
 # def send_audio():

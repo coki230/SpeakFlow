@@ -262,6 +262,19 @@
 
                         updateStatus('Audio sent successfully');
 
+                        // Get the response from backend and display in chat
+                        const responseData = await response.json();
+                        let botResponse = "I received your message";
+
+                        if (responseData && responseData.message) {
+                            botResponse = responseData.message;
+                        } else if (responseData && responseData.response) {
+                            botResponse = responseData.response;
+                        }
+
+                        // Add bot response to chat
+                        addMessage('bot', botResponse);
+
                         // Play the received audio back
                         const audioUrl = URL.createObjectURL(audioBlob);
                         document.getElementById('audioPlayer').src = audioUrl;
@@ -269,6 +282,7 @@
                     } catch (error) {
                         console.error('Error sending audio:', error);
                         updateStatus('Failed to send audio');
+                        addMessage('bot', 'Sorry, I encountered an error processing your request.');
                     }
                 };
 
@@ -287,6 +301,7 @@
             } catch (error) {
                 console.error('Error accessing microphone:', error);
                 updateStatus('Microphone access denied');
+                addMessage('bot', 'Microphone access denied. Please allow microphone permissions.');
             }
         }
 
