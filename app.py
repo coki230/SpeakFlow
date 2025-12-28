@@ -17,9 +17,9 @@ def upload_file():
         return jsonify({"error": "No file part"}), 400
 
     file = request.files['audio']
-    # # Save the file
-    # file_path = "temp_audio.webm"
-    # file.save(file_path)
+    # Save the file
+    file_path = "temp_audio.webm"
+    file.save(file_path)
 
     input_text = v_util.audio_to_text(file)
     out_text = v_util.get_llm_response(input_text)

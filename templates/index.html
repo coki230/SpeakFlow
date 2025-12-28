@@ -1,41 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Voice Assistant</title>
+    <title>AI 语音助手</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* --- 基础样式复位 --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #ffffff; /* 移除背景渐变，改为纯白 */
+            font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f5f7fa;
             height: 100vh;
             display: flex;
-            align-items: center;
             justify-content: center;
         }
 
+        /* --- 主容器：适配手机全屏 --- */
         .container {
             width: 100%;
             max-width: 600px;
-            height: 95vh; /* 提高高度到 95% 视口高度 */
-            background: #ffffff;
+            height: 100vh;
+            background: #fff;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
-            /* 手机端稍微留一点顶部余量，或者直接 100vh */
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
         }
 
+        /* --- 顶部标题栏 --- */
         .header {
-            background: #182848;
+            background: #1c2c4b;
             color: white;
-            padding: 15px;
+            padding: 16px;
             text-align: center;
+            font-size: 1.1rem;
+            font-weight: 600;
             flex-shrink: 0;
         }
 
-        /* 聊天区域 - 核心：由于容器变高，这里会自动撑开 */
+        /* --- 聊天内容区 --- */
         .chat-container {
             flex: 1;
             padding: 20px;
@@ -43,185 +51,242 @@
             background: #f0f2f5;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 16px;
         }
 
+        /* --- 消息气泡 --- */
         .message {
             max-width: 85%;
             padding: 12px 16px;
-            border-radius: 15px;
+            border-radius: 16px;
             font-size: 15px;
-            line-height: 1.4;
+            line-height: 1.5;
             position: relative;
-            animation: slideIn 0.3s ease;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease;
         }
 
-        @keyframes slideIn {
+        @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         .bot-message {
             align-self: flex-start;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #6e8efb, #a777e3);
             color: white;
-            border-bottom-left-radius: 2px;
+            border-bottom-left-radius: 4px;
         }
 
         .user-message {
             align-self: flex-end;
-            background: #182848;
+            background: #1c2c4b;
             color: white;
-            border-bottom-right-radius: 2px;
+            border-bottom-right-radius: 4px;
         }
 
         .timestamp {
-            font-size: 11px;
-            margin-top: 5px;
-            opacity: 0.7;
+            font-size: 10px;
+            margin-top: 4px;
+            opacity: 0.6;
             display: block;
+            text-align: right;
         }
 
-        /* 控制区域 */
+        /* --- 底部控制区 --- */
         .controls {
-            padding: 20px;
-            padding-bottom: 30px; /* 增加底部间距适配手机手势区 */
-            background: white;
+            padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+            background: #fff;
             border-top: 1px solid #eee;
-            text-align: center;
-            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .mic-button {
-            width: 70px;
-            height: 70px;
+            width: 72px;
+            height: 72px;
             border-radius: 50%;
             border: none;
-            background: #ff6b6b;
+            background: #ff5e57;
             color: white;
-            font-size: 28px;
+            font-size: 30px;
             cursor: pointer;
-            box-shadow: 0 5px 15px rgba(255,107,107,0.4);
-            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(255, 94, 87, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto;
+            transition: all 0.2s active;
         }
 
-        .mic-button:active { transform: scale(0.9); }
+        .mic-button:active {
+            transform: scale(0.92);
+            opacity: 0.9;
+        }
 
         .mic-button.recording {
-            background: #4ecdc4;
+            background: #2ecc71;
             animation: pulse 1.5s infinite;
         }
 
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(78,205,196, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(78,205,196, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(78,205,196, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.6); }
+            70% { box-shadow: 0 0 0 15px rgba(46, 204, 113, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
         }
 
         .status-text {
-            margin-top: 10px;
+            margin-top: 12px;
             font-size: 13px;
-            color: #666;
-            height: 20px;
+            color: #888;
+            font-weight: 500;
         }
-
-        #audioPlayer { display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="header">
-        <h2>Voice AI Assistant</h2>
-    </div>
+    <div class="header">AI 语音助理</div>
 
     <div class="chat-container" id="chatContainer">
         <div class="message bot-message">
-            Hi there! Click the mic and speak in English. I'll translate and reply to you.
-            <span class="timestamp">System</span>
+            您好！点击下方麦克风开始交流，我会为您翻译并回答。
+            <span class="timestamp">AI · 助手</span>
         </div>
     </div>
 
     <div class="controls">
         <button class="mic-button" id="micBtn">🎤</button>
-        <div class="status-text" id="status">Ready</div>
+        <div class="status-text" id="status">点击开始录音</div>
     </div>
 </div>
 
-<audio id="audioPlayer"></audio>
+<audio id="audioPlayer" playsinline></audio>
 
 <script>
-    // ... 这里保持你原来的 JavaScript 代码逻辑不变 ...
     let mediaRecorder;
     let audioChunks = [];
+    let streamRef = null;
+
     const micBtn = document.getElementById('micBtn');
     const status = document.getElementById('status');
     const chatContainer = document.getElementById('chatContainer');
     const audioPlayer = document.getElementById('audioPlayer');
 
+    // 辅助函数：添加消息到UI
     function addMessage(sender, text) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${sender}-message`;
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        msgDiv.innerHTML = `${text}<span class="timestamp">${sender === 'user' ? 'You' : 'AI'} · ${time}</span>`;
+
+        msgDiv.innerHTML = `
+            ${text}
+            <span class="timestamp">${sender === 'user' ? '您' : 'AI'} · ${time}</span>
+        `;
+
         chatContainer.appendChild(msgDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
+    // 点击麦克风事件
     micBtn.onclick = async () => {
+        // 【关键】移动端音频预解锁
+        // 在用户点击的瞬间播放一个空操作，获取播放权限
+        audioPlayer.play().then(() => {
+            audioPlayer.pause();
+        }).catch(e => console.log("Audio context initialized"));
+
+        // 如果正在录音，则停止
         if (mediaRecorder && mediaRecorder.state === "recording") {
             mediaRecorder.stop();
             return;
         }
+
         try {
+            // 获取麦克风权限
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef = stream;
+
             mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             audioChunks = [];
-            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+
             mediaRecorder.onstart = () => {
                 micBtn.classList.add('recording');
                 micBtn.textContent = '⏹️';
-                status.textContent = "Recording...";
+                status.textContent = "正在倾听...";
             };
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunks.push(e.data);
+            };
+
             mediaRecorder.onstop = async () => {
                 micBtn.classList.remove('recording');
                 micBtn.textContent = '🎤';
-                status.textContent = "Processing...";
+                status.textContent = "正在处理...";
+
+                // 【关键】停止所有轨道，释放麦克风，防止占用音频输出通道
+                streamRef.getTracks().forEach(track => track.stop());
+
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 await sendToServer(audioBlob);
             };
+
             mediaRecorder.start();
         } catch (err) {
-            console.error("Mic error:", err);
-            alert("Could not access microphone.");
+            console.error("麦克风权限失败:", err);
+            alert("无法访问麦克风，请确保已授予权限并使用 HTTPS 访问。");
         }
     };
 
+    // 发送数据到后端
     async function sendToServer(blob) {
         const formData = new FormData();
         formData.append('audio', blob, 'user_voice.webm');
+
         try {
-            const response = await fetch('/send-audio', { method: 'POST', body: formData });
-            if (!response.ok) throw new Error("Server error");
+            const response = await fetch('/send-audio', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error("服务器响应错误");
+
             const data = await response.json();
+
+            // 更新 UI
             if (data.user_text) addMessage('user', data.user_text);
             if (data.bot_text) addMessage('bot', data.bot_text);
-            if (data.audio_base64) playAudio(data.audio_base64);
-            status.textContent = "Ready";
+
+            // 播放返回的语音
+            if (data.audio_base64) {
+                playAudio(data.audio_base64);
+            }
+
+            status.textContent = "已就绪";
         } catch (err) {
-            status.textContent = "Error occurred";
-            addMessage('bot', "Sorry, I couldn't process that voice message.");
+            console.error("请求失败:", err);
+            status.textContent = "处理出错";
+            addMessage('bot', "抱歉，处理您的语音时出了一点问题。");
         }
     }
 
+    // 播放语音函数
     function playAudio(base64Data) {
-        const source = base64Data.startsWith('data:') ? base64Data : `data:audio/wav;base64,${base64Data}`;
-        audioPlayer.src = source;
-        audioPlayer.play().catch(e => console.log("Auto-play blocked", e));
+        // 根据后端返回格式判断前缀（通常 LLM 语音为 mp3）
+        const prefix = base64Data.startsWith('data:') ? '' : 'data:audio/mpeg;base64,';
+        audioPlayer.src = prefix + base64Data;
+
+        // 显式加载并播放
+        audioPlayer.load();
+        const playPromise = audioPlayer.play();
+
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.warn("自动播放受阻，等待交互:", error);
+                status.textContent = "点击气泡播放回复";
+            });
+        }
     }
 </script>
 
