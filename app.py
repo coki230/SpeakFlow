@@ -17,13 +17,13 @@ def upload_file():
         return jsonify({"error": "No file part"}), 400
 
     file = request.files['audio']
-    # Save the file
-    file_path = "temp_audio.webm"
-    file.save(file_path)
+    # # Save the file
+    # file_path = "temp_audio.webm"
+    # file.save(file_path)
 
     input_text = v_util.audio_to_text(file)
     out_text = v_util.get_llm_response(input_text)
-    print(out_text)
+    print(f"input text: {input_text}, output text: {out_text}")
 
     # 调用异步函数生成语音
     loop = asyncio.new_event_loop()

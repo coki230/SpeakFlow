@@ -6,6 +6,8 @@ import traceback
 import edge_tts
 import base64
 import io
+from llama_cpp import Llama
+
 # import os
 # os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -25,22 +27,18 @@ def webm_to_ndarray(webm_bytes):
         samples = samples.astype(np.float32) / 2147483648.0
     return samples
 
-
+model_path="D:/lm-model/models/akshaykdeo/Phi-3.5-mini-instruct-Q4_K_M-GGUF/Phi-3.5-mini-instruct-Q4_K_M.gguf"
 class VoiceUtil:
     def __init__(self):
         self.voice_2_text_model = whisper.load_model("small.en")
 
-        model_id = "microsoft/Phi-3.5-mini-instruct"
-        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        brain_model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            device_map="auto",
-            torch_dtype="auto",
-            # 将此项设为 False，强制使用 transformers 库内置的 Phi3 实现
-            # 而不是从 .cache 文件夹加载那个报错的 modeling_phi3.py
-            trust_remote_code=False
+
+        self.brain_model = Llama(
+            model_path=model_path,
+            n_ctx=2048,  # 上下文长度
+            n_gpu_layers=-1,  # 全部放入 GPU
+            n_threads=8,  # 配合你强大的 CPU 核心数
         )
-        self.chat_pipe = pipeline("text-generation", model=brain_model, tokenizer=self.tokenizer)
 
     def audio_to_text(self, file_path):
         """
@@ -65,19 +63,21 @@ class VoiceUtil:
 
     def get_llm_response(self, user_text):
         messages = [
-            {"role": "system", "content": "You are a concise English assistant. your name is lili"},
+            {"role": "system", "content": "You are a concise English assistant. your name is coki"},
             {"role": "user", "content": user_text},
         ]
 
-        # 构建 Prompt 模板
-        prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        # 调用接口
+        response = self.brain_model.create_chat_completion(
+            messages=messages,
+            max_tokens=150,
+            temperature=0.7,
+            repeat_penalty=1.1
+        )
 
-        outputs = self.chat_pipe(prompt, max_new_tokens=100, do_sample=True, temperature=0.7)
+        content = response['choices'][0]['message']['content'].strip()
 
-        # 提取生成的回复内容
-        full_text = outputs[0]['generated_text']
-        response = full_text.split("<|assistant|>")[-1].strip()
-        return response
+        return content
 
     async def get_bot_audio_base64(self, text, voice="en-US-GuyNeural"):
         # 1. 初始化 edge-tts
