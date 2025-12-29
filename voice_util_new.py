@@ -8,7 +8,6 @@ import base64
 import io
 from llama_cpp import Llama
 import re
-import asyncio
 
 # import os
 # os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
@@ -33,6 +32,7 @@ model_path="D:/lm-model/models/akshaykdeo/Phi-3.5-mini-instruct-Q4_K_M-GGUF/Phi-
 class VoiceUtil:
     def __init__(self):
         self.voice_2_text_model = whisper.load_model("small.en")
+
 
         self.brain_model = Llama(
             model_path=model_path,
@@ -60,21 +60,14 @@ class VoiceUtil:
             print(f"语音识别错误: {str(e)}")
             return None
 
-    def send_response(self, text, emit_func):
+    def send_response(self, text):
         # pass
-        # 调用异步函数生成语音
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        audio_base64 = loop.run_until_complete(self.get_bot_audio_base64(text))
-        loop.close()
-
-        print(f"bot text is emitting {text}")
-        emit_func('bot_text', {'text': text})
-        # 发送音频数据
-        emit_func('bot_audio', {'audio': audio_base64})
+        print("*" * 20, end="\n")
+        print(text)
+        print("*" * 20, end="\n")
 
 
-    def get_llm_response(self, user_text, emit_func):
+    def get_llm_response(self, user_text):
         messages = [
             {"role": "system", "content": "You are a concise English assistant. your name is coki"},
             {"role": "user", "content": user_text},
@@ -112,15 +105,14 @@ class VoiceUtil:
                     # 2. 检查待发送区的内容是否达到 TTS 要求的长度
                     if len(pending_buffer.strip()) >= self.min_tts_len:
                         # 只有够长了，才塞进队列
-                        print(f"pending_buffer is {pending_buffer}")
-                        self.send_response(pending_buffer.strip(), emit_func)
+                        self.send_response(pending_buffer.strip())
                         pending_buffer = ""  # 塞完后清空
 
             # 3. 扫尾工作：处理所有残余文字
             # 即使最后一句很短，也要强行合并发送
         final_remains = (pending_buffer + " " + current_buffer).strip()
         if final_remains:
-            self.send_response(final_remains, emit_func)
+            self.send_response(final_remains)
 
         print("\n[回答结束]")
         return full_content

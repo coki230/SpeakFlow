@@ -1,42 +1,70 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, render_template
+from flask_socketio import SocketIO, emit
 import voice_util
 import asyncio
-
+import base64
 
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*", max_size=10 * 1024 * 1024)  # 10MB
+
 v_util = voice_util.VoiceUtil()
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 
-@app.route('/send-audio', methods=['POST'])
-def upload_file():
-    if 'audio' not in request.files:
-        return jsonify({"error": "No file part"}), 400
+@socketio.on('connect')
+def handle_connect():
+    print('Client connected')
+    emit('connected', {'message': '连接成功'})
 
-    file = request.files['audio']
-    # # Save the file
-    # file_path = "temp_audio.webm"
-    # file.save(file_path)
 
-    input_text = v_util.audio_to_text(file)
-    out_text = v_util.get_llm_response(input_text)
-    print(f"input text: {input_text}, output text: {out_text}")
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Client disconnected')
 
-    # 调用异步函数生成语音
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    audio_base64 = loop.run_until_complete(v_util.get_bot_audio_base64(out_text))
-    loop.close()
 
-    return jsonify({
-        "user_text": input_text,  # 用户的文字（显示在右侧）
-        "bot_text": out_text,  # 机器的文字（显示在左侧）
-        "audio_base64": audio_base64  # 回复的声音（自动播放）
-    }), 200
+@socketio.on('audio_data')
+def handle_audio(data):
+    """处理接收到的音频数据"""
+    try:
+        # 从 base64 解码音频数据
+        audio_blob = base64.b64decode(data['audio'])
+
+        # 发送处理状态
+        emit('status', {'message': '正在识别语音...'})
+
+        # 语音转文字
+        input_text = v_util.audio_to_text(audio_blob)
+
+        # 发送用户文本
+        emit('user_text', {'text': input_text})
+
+        # 发送处理状态
+        emit('status', {'message': '正在思考回复...'})
+
+        # 获取 LLM 响应
+        out_text = v_util.get_llm_response(input_text, emit)
+
+        # # 发送机器人文本
+        # emit('bot_text', {'text': out_text})
+
+        # # 发送处理状态
+        # emit('status', {'message': '正在生成语音...'})
+
+        print(f"input text: {input_text}, output text: {out_text}")
+
+
+        # 发送完成状态
+        emit('status', {'message': '已就绪'})
+
+    except Exception as e:
+        print(f"Error processing audio: {e}")
+        emit('error', {'message': '处理语音时出错，请重试'})
+        emit('status', {'message': '处理出错'})
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)

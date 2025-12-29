@@ -21,7 +21,7 @@
             justify-content: center;
         }
 
-        /* --- 主容器：适配手机全屏 --- */
+        /* --- 主容器:适配手机全屏 --- */
         .container {
             width: 100%;
             max-width: 600px;
@@ -41,6 +41,28 @@
             font-size: 1.1rem;
             font-weight: 600;
             flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .connection-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #2ecc71;
+            animation: blink 2s infinite;
+        }
+
+        .connection-indicator.disconnected {
+            background: #e74c3c;
+            animation: none;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
 
         /* --- 聊天内容区 --- */
@@ -116,12 +138,17 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s active;
+            transition: all 0.2s;
         }
 
         .mic-button:active {
             transform: scale(0.92);
             opacity: 0.9;
+        }
+
+        .mic-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .mic-button.recording {
@@ -146,35 +173,133 @@
 <body>
 
 <div class="container">
-    <div class="header">AI 语音助理</div>
+    <div class="header">
+        <div class="connection-indicator" id="connectionIndicator"></div>
+        AI 语音助理
+    </div>
 
     <div class="chat-container" id="chatContainer">
         <div class="message bot-message">
-            您好！点击下方麦克风开始交流，我会为您翻译并回答。
+            您好!点击下方麦克风开始交流,我会为您翻译并回答。
             <span class="timestamp">AI · 助手</span>
         </div>
     </div>
 
     <div class="controls">
         <button class="mic-button" id="micBtn">🎤</button>
-        <div class="status-text" id="status">点击开始录音</div>
+        <div class="status-text" id="status">连接中...</div>
     </div>
 </div>
 
 <audio id="audioPlayer" playsinline></audio>
 
+<!-- 引入 Socket.IO 客户端库 -->
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
 <script>
     let mediaRecorder;
     let audioChunks = [];
     let streamRef = null;
+    let socket;
+    let isProcessing = false;
 
     const micBtn = document.getElementById('micBtn');
     const status = document.getElementById('status');
     const chatContainer = document.getElementById('chatContainer');
     const audioPlayer = document.getElementById('audioPlayer');
+    const connectionIndicator = document.getElementById('connectionIndicator');
 
-    // 辅助函数：添加消息到UI
+    // 用于合并 bot_text 的状态
+    let currentBotMessage = null;
+
+    // 音频播放队列
+    let audioQueue = [];
+    let isPlayingAudio = false;
+
+    // 初始化 WebSocket 连接
+    function initWebSocket() {
+        socket = io({
+            transports: ['websocket', 'polling']
+        });
+
+        socket.on('connect', () => {
+            console.log('✅ WebSocket 连接成功');
+            status.textContent = '点击开始录音';
+            connectionIndicator.classList.remove('disconnected');
+            micBtn.disabled = false;
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ WebSocket 断开连接');
+            status.textContent = '连接断开,刷新重试';
+            connectionIndicator.classList.add('disconnected');
+            micBtn.disabled = true;
+        });
+
+        socket.on('connected', (data) => {
+            console.log('✅ 收到连接确认:', data.message);
+        });
+
+        socket.on('status', (data) => {
+            console.log('📊 状态更新:', data.message);
+            status.textContent = data.message;
+        });
+
+        socket.on('user_text', (data) => {
+            console.log('👤 收到用户文本:', data.text);
+            addMessage('user', data.text);
+        });
+
+        socket.on('bot_text', (data) => {
+            console.log('🤖 收到Bot文本[立即显示]:', data.text);
+            // 立即显示收到的文本
+            appendBotText(data.text);
+        });
+
+        socket.on('bot_audio', (data) => {
+            console.log('🔊 收到Bot音频[立即加入队列]，当前队列长度:', audioQueue.length);
+            // 立即添加到队列并播放
+            addAudioToQueue(data.audio);
+        });
+
+        socket.on('error', (data) => {
+            console.error('❌ 收到错误:', data.message);
+            currentBotMessage = null; // 结束当前消息
+            addMessage('bot', data.message);
+            status.textContent = '已就绪';
+            isProcessing = false;
+        });
+    }
+
+    // 追加 bot 文本到当前消息（立即显示）
+    function appendBotText(text) {
+        console.log('📝 追加文本到气泡:', text);
+
+        // 如果没有当前消息,创建一个新的
+        if (!currentBotMessage) {
+            console.log('🆕 创建新的Bot消息气泡');
+            currentBotMessage = document.createElement('div');
+            currentBotMessage.className = 'message bot-message';
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            currentBotMessage.innerHTML = `
+                <span class="bot-content"></span>
+                <span class="timestamp">AI · ${time}</span>
+            `;
+            chatContainer.appendChild(currentBotMessage);
+        }
+
+        // 立即追加文本并滚动
+        const contentSpan = currentBotMessage.querySelector('.bot-content');
+        contentSpan.textContent += text;
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        console.log('✅ 文本已显示，当前内容:', contentSpan.textContent);
+    }
+
+    // 辅助函数:添加消息到UI
     function addMessage(sender, text) {
+        console.log(`💬 添加${sender}消息:`, text);
+        currentBotMessage = null; // 结束当前 bot 消息
+
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${sender}-message`;
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -188,21 +313,88 @@
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
+    // 添加音频到播放队列（立即触发播放）
+    function addAudioToQueue(base64Audio) {
+        console.log('➕ 添加音频到队列，队列长度:', audioQueue.length);
+        audioQueue.push(base64Audio);
+
+        // 如果当前没有播放，立即开始播放
+        if (!isPlayingAudio) {
+            console.log('▶️  当前没有播放，立即开始播放');
+            playNextAudio();
+        } else {
+            console.log('⏸️  已有音频在播放，加入队列等待');
+        }
+    }
+
+    // 播放队列中的下一个音频
+    function playNextAudio() {
+        if (audioQueue.length === 0) {
+            console.log('✅ 队列为空，播放完成');
+            isPlayingAudio = false;
+            isProcessing = false;
+            status.textContent = '点击开始录音';
+            return;
+        }
+
+        console.log('🎵 开始播放下一个音频，剩余队列:', audioQueue.length);
+        isPlayingAudio = true;
+        const base64Audio = audioQueue.shift();
+
+        const prefix = base64Audio.startsWith('data:') ? '' : 'data:audio/mpeg;base64,';
+        audioPlayer.src = prefix + base64Audio;
+
+        audioPlayer.load();
+
+        // 立即播放
+        const playPromise = audioPlayer.play();
+
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                console.log('✅ 音频开始播放成功');
+            }).catch(error => {
+                console.warn("⚠️  自动播放受阻:", error);
+                status.textContent = "点击气泡播放回复";
+                // 播放失败，继续下一个
+                playNextAudio();
+            });
+        }
+    }
+
+    // 监听音频播放结束事件
+    audioPlayer.addEventListener('ended', () => {
+        console.log('🎵 音频播放结束，播放下一个');
+        playNextAudio();
+    });
+
+    // 监听音频播放错误
+    audioPlayer.addEventListener('error', (e) => {
+        console.error('❌ 音频播放错误:', e);
+        playNextAudio(); // 跳过错误的音频,继续播放下一个
+    });
+
     // 点击麦克风事件
     micBtn.onclick = async () => {
+        // 防止重复点击
+        if (isProcessing) {
+            console.log('⏸️  正在处理中，忽略点击');
+            return;
+        }
+
         // 【关键】移动端音频预解锁
-        // 在用户点击的瞬间播放一个空操作，获取播放权限
         audioPlayer.play().then(() => {
             audioPlayer.pause();
-        }).catch(e => console.log("Audio context initialized"));
+        }).catch(e => console.log("🔓 Audio context initialized"));
 
-        // 如果正在录音，则停止
+        // 如果正在录音,则停止
         if (mediaRecorder && mediaRecorder.state === "recording") {
+            console.log('⏹️  停止录音');
             mediaRecorder.stop();
             return;
         }
 
         try {
+            console.log('🎤 开始获取麦克风权限');
             // 获取麦克风权限
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef = stream;
@@ -211,6 +403,7 @@
             audioChunks = [];
 
             mediaRecorder.onstart = () => {
+                console.log('🔴 开始录音');
                 micBtn.classList.add('recording');
                 micBtn.textContent = '⏹️';
                 status.textContent = "正在倾听...";
@@ -221,73 +414,59 @@
             };
 
             mediaRecorder.onstop = async () => {
+                console.log('⏹️  录音停止');
                 micBtn.classList.remove('recording');
                 micBtn.textContent = '🎤';
-                status.textContent = "正在处理...";
+                isProcessing = true;
+                status.textContent = "处理中...";
 
-                // 【关键】停止所有轨道，释放麦克风，防止占用音频输出通道
+                // 【关键】停止所有轨道,释放麦克风
                 streamRef.getTracks().forEach(track => track.stop());
 
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                console.log('📦 音频数据大小:', audioBlob.size, 'bytes');
                 await sendToServer(audioBlob);
             };
 
             mediaRecorder.start();
         } catch (err) {
-            console.error("麦克风权限失败:", err);
-            alert("无法访问麦克风，请确保已授予权限并使用 HTTPS 访问。");
+            console.error("❌ 麦克风权限失败:", err);
+            alert("无法访问麦克风,请确保已授予权限并使用 HTTPS 访问。");
         }
     };
 
-    // 发送数据到后端
+    // 通过 WebSocket 发送音频数据
     async function sendToServer(blob) {
-        const formData = new FormData();
-        formData.append('audio', blob, 'user_voice.webm');
-
         try {
-            const response = await fetch('/send-audio', {
-                method: 'POST',
-                body: formData
-            });
+            console.log('🧹 清空之前的状态，开始新对话');
+            // 清空之前的状态（开始新对话）
+            audioQueue = [];
+            currentBotMessage = null;
 
-            if (!response.ok) throw new Error("服务器响应错误");
+            // 将 Blob 转换为 base64
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64Audio = reader.result.split(',')[1];
+                console.log('📤 发送音频数据到服务器');
 
-            const data = await response.json();
-
-            // 更新 UI
-            if (data.user_text) addMessage('user', data.user_text);
-            if (data.bot_text) addMessage('bot', data.bot_text);
-
-            // 播放返回的语音
-            if (data.audio_base64) {
-                playAudio(data.audio_base64);
-            }
-
-            status.textContent = "已就绪";
+                // 通过 WebSocket 发送
+                socket.emit('audio_data', {
+                    audio: base64Audio
+                });
+                console.log('✅ 音频数据已发送，等待响应...');
+            };
+            reader.readAsDataURL(blob);
         } catch (err) {
-            console.error("请求失败:", err);
-            status.textContent = "处理出错";
-            addMessage('bot', "抱歉，处理您的语音时出了一点问题。");
+            console.error("❌ 发送失败:", err);
+            status.textContent = "发送出错";
+            addMessage('bot', "抱歉,发送您的语音时出了一点问题。");
+            isProcessing = false;
         }
     }
 
-    // 播放语音函数
-    function playAudio(base64Data) {
-        // 根据后端返回格式判断前缀（通常 LLM 语音为 mp3）
-        const prefix = base64Data.startsWith('data:') ? '' : 'data:audio/mpeg;base64,';
-        audioPlayer.src = prefix + base64Data;
-
-        // 显式加载并播放
-        audioPlayer.load();
-        const playPromise = audioPlayer.play();
-
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.warn("自动播放受阻，等待交互:", error);
-                status.textContent = "点击气泡播放回复";
-            });
-        }
-    }
+    // 初始化连接
+    console.log('🚀 初始化应用');
+    initWebSocket();
 </script>
 
 </body>
