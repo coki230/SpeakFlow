@@ -167,14 +167,20 @@
 
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            if (data.type === 'user_text') addMessage('user', data.text);
+            if (data.type === 'user_text') {
+                addMessage('user', data.text);
+                currentBotMessage = null;
+            }
             if (data.type === 'bot_token') appendBotText(data.token);
             if (data.type === 'bot_audio') {
                 console.log('🎵 收到音频片段');
                 addAudioToQueue(data.audio);
             }
             if (data.type === 'status') status.textContent = data.message;
-            if (data.type === 'finished') isProcessing = false;
+            if (data.type === 'finished') {
+                isProcessing = false;
+                currentBotMessage = null;
+            }
         };
     }
 
