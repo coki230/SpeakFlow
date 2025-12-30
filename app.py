@@ -3,8 +3,6 @@ from fastapi.responses import HTMLResponse
 import voice_util
 import base64
 import uvicorn
-import re
-import asyncio
 
 app = FastAPI()
 v_util = voice_util.VoiceUtil()
@@ -28,48 +26,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 audio_bytes = base64.b64decode(data["audio"])
 
                 # 2. ASR 识别 (建议在单独的线程运行，避免阻塞事件循环)
-                input_text = await asyncio.to_thread(v_util.audio_to_text, audio_bytes)
+                input_text = await v_util.audio_to_text(audio_bytes)
                 if not input_text: continue
 
                 await websocket.send_json({"type": "user_text", "text": input_text})
 
                 # 3. LLM 流式生成
                 # 假设 v_util.brain_model.create_chat_completion 支持 stream=True
-                gen = v_util.brain_model.create_chat_completion(
-                    messages=[{"role": "user", "content": input_text}],
-                    stream=True
-                )
-
-                full_response = ""
-                current_buffer = ""
-                pending_tts = ""
-
-                for chunk in gen:
-                    token = chunk['choices'][0]['delta'].get('content', '')
-                    if token:
-                        full_response += token
-                        current_buffer += token
-                        # 实时推送文本
-                        await websocket.send_json({"type": "bot_token", "token": token})
-
-                        # 断句逻辑
-                        if re.search(r'[.!?;]\s|\n|[.!?;]$', current_buffer):
-                            pending_tts += " " + current_buffer.strip()
-                            current_buffer = ""
-
-                            if len(pending_tts.strip()) >= 20:
-                                # 4. 实时 TTS 合成并发送音频
-                                audio_b64 = await v_util.get_bot_audio_base64(pending_tts.strip())
-                                await websocket.send_json({"type": "bot_audio", "audio": audio_b64})
-                                pending_tts = ""
-
-                # 扫尾
-                final = (pending_tts + " " + current_buffer).strip()
-                if final:
-                    audio_b64 = await v_util.get_bot_audio_base64(final)
-                    await websocket.send_json({"type": "bot_audio", "audio": audio_b64})
-
-                await websocket.send_json({"type": "finished"})
+                await v_util.get_llm_response(input_text, websocket)
 
     except WebSocketDisconnect:
         print("Client disconnected")

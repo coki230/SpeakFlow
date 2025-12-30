@@ -8,7 +8,6 @@ import base64
 import io
 from llama_cpp import Llama
 import re
-import asyncio
 
 # import os
 # os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
@@ -29,7 +28,7 @@ def webm_to_ndarray(webm_bytes):
         samples = samples.astype(np.float32) / 2147483648.0
     return samples
 
-model_path="D:/lm-model/models/akshaykdeo/Phi-3.5-mini-instruct-Q4_K_M-GGUF/Phi-3.5-mini-instruct-Q4_K_M.gguf"
+model_path="D:/lm-model/models/Triangle104/Qwen2.5-3B-Instruct-Q4_K_M-GGUF/qwen2.5-3b-instruct-q4_k_m.gguf"
 class VoiceUtil:
     def __init__(self):
         self.voice_2_text_model = whisper.load_model("small.en")
@@ -42,7 +41,7 @@ class VoiceUtil:
         )
         self.min_tts_len = 10
 
-    def audio_to_text(self, file):
+    async def audio_to_text(self, file):
         """
         将音频文件转换为文字
         支持多种音频格式
@@ -60,70 +59,53 @@ class VoiceUtil:
             print(f"语音识别错误: {str(e)}")
             return None
 
-    def send_response(self, text, emit_func):
-        # pass
-        # 调用异步函数生成语音
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        audio_base64 = loop.run_until_complete(self.get_bot_audio_base64(text))
-        loop.close()
-
-        print(f"bot text is emitting {text}")
-        emit_func('bot_text', {'text': text})
-        # 发送音频数据
-        emit_func('bot_audio', {'audio': audio_base64})
-
-
-    def get_llm_response(self, user_text, emit_func):
+    async def get_llm_response(self, user_text, websocket):
         messages = [
-            {"role": "system", "content": "You are a concise English assistant. your name is coki"},
+            {"role": "system",
+             "content": "You are Coki, a friendly and casual English chat assistant. Respond like a human in a normal conversation: keep it short, natural, and fun. No lists, explanations, or extra details unless asked. Limit to 1-2 sentences max. Be concise and engaging."},
             {"role": "user", "content": user_text},
         ]
 
         # 调用接口
         response_generator = self.brain_model.create_chat_completion(
             messages=messages,
-            max_tokens=150,
-            temperature=0.7,
-            repeat_penalty=1.1,
+            max_tokens=60,
+            temperature=0.85,
+            repeat_penalty=1.2,
             stream=True,
         )
-        full_content = ""
-        # 这里的 current_buffer 存储尚未断句的文字
-        current_buffer = ""
-        # 这里的 pending_buffer 存储已经断句但还没达到最小长度的文字
-        pending_buffer = ""
 
-        print("AI 正在回答: ", end="")
+        full_response = ""
+        current_buffer = ""
+        pending_tts = ""
 
         for chunk in response_generator:
             token = chunk['choices'][0]['delta'].get('content', '')
             if token:
-                full_content += token
+                full_response += token
                 current_buffer += token
+                # 实时推送文本
+                await websocket.send_json({"type": "bot_token", "token": token})
 
-                # 1. 检查当前累加的 token 是否构成了断句
-                # 注意：这里使用正则匹配标点。如果 token 是 "Hello!"，则匹配成功
+                # 断句逻辑
                 if re.search(r'[.!?;]\s|\n|[.!?;]$', current_buffer):
-                    # 把这一句完整的话存入待发送区
-                    pending_buffer += " " + current_buffer.strip()
-                    current_buffer = ""  # 清空当前句缓冲区
+                    pending_tts += " " + current_buffer.strip()
+                    current_buffer = ""
 
-                    # 2. 检查待发送区的内容是否达到 TTS 要求的长度
-                    if len(pending_buffer.strip()) >= self.min_tts_len:
-                        # 只有够长了，才塞进队列
-                        print(f"pending_buffer is {pending_buffer}")
-                        self.send_response(pending_buffer.strip(), emit_func)
-                        pending_buffer = ""  # 塞完后清空
+                    if len(pending_tts.strip()) >= 20:
+                        # 4. 实时 TTS 合成并发送音频
+                        audio_b64 = await self.get_bot_audio_base64(pending_tts.strip())
+                        await websocket.send_json({"type": "bot_audio", "audio": audio_b64})
+                        pending_tts = ""
 
-            # 3. 扫尾工作：处理所有残余文字
-            # 即使最后一句很短，也要强行合并发送
-        final_remains = (pending_buffer + " " + current_buffer).strip()
-        if final_remains:
-            self.send_response(final_remains, emit_func)
+        # 扫尾
+        final = (pending_tts + " " + current_buffer).strip()
+        if final:
+            audio_b64 = await self.get_bot_audio_base64(final)
+            await websocket.send_json({"type": "bot_audio", "audio": audio_b64})
 
-        print("\n[回答结束]")
-        return full_content
+        await websocket.send_json({"type": "finished"})
+        print(f"user text: {user_text}, response: {full_response}")
 
     async def get_bot_audio_base64(self, text, voice="en-US-GuyNeural"):
         # 1. 初始化 edge-tts
