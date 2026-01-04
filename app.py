@@ -5,7 +5,6 @@ import base64
 import uvicorn
 
 app = FastAPI()
-v_util = voice_util.VoiceUtil()
 
 @app.get("/")
 async def get():
@@ -15,6 +14,7 @@ async def get():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    v_util = voice_util.VoiceUtil()
     await websocket.accept()
     try:
         while True:

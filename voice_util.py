@@ -8,11 +8,24 @@ import base64
 import io
 from llama_cpp import Llama
 import re
+from collections import deque
 
 # import os
 # os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
+model_path="D:/lm-model/models/Triangle104/Qwen2.5-3B-Instruct-Q4_K_M-GGUF/qwen2.5-3b-instruct-q4_k_m.gguf"
+voice_2_text_model = whisper.load_model("small.en")
+brain_model = Llama(
+    model_path=model_path,
+    n_ctx=2048,  # 上下文长度
+    n_gpu_layers=-1,  # 全部放入 GPUd
+    n_threads=8,  # 配合你强大的 CPU 核心数
+)
+messages = [
+    {"role": "system",
+     "content": "You are Coki, a friendly and casual English chat assistant. Respond like a human in a normal conversation: keep it natural, and fun. No lists, explanations, or extra details unless asked. Be concise and engaging. if last sentence have errors, List each error with explanation and suggested correction."},
+]
 
 def webm_to_ndarray(webm_bytes):
     # pydub 可以识别 webm 格式
@@ -28,18 +41,12 @@ def webm_to_ndarray(webm_bytes):
         samples = samples.astype(np.float32) / 2147483648.0
     return samples
 
-model_path="D:/lm-model/models/Triangle104/Qwen2.5-3B-Instruct-Q4_K_M-GGUF/qwen2.5-3b-instruct-q4_k_m.gguf"
 class VoiceUtil:
     def __init__(self):
-        self.voice_2_text_model = whisper.load_model("small.en")
-
-        self.brain_model = Llama(
-            model_path=model_path,
-            n_ctx=2048,  # 上下文长度
-            n_gpu_layers=-1,  # 全部放入 GPU
-            n_threads=8,  # 配合你强大的 CPU 核心数
-        )
-        self.min_tts_len = 10
+        self.voice_2_text_model = voice_2_text_model
+        self.brain_model = brain_model
+        self.conversation_history = deque(maxlen=10)
+        self.max_history_turns = 3
 
     async def audio_to_text(self, file):
         """
@@ -60,11 +67,11 @@ class VoiceUtil:
             return None
 
     async def get_llm_response(self, user_text, websocket):
-        messages = [
-            {"role": "system",
-             "content": "You are Coki, a friendly and casual English chat assistant. Respond like a human in a normal conversation: keep it short, natural, and fun. No lists, explanations, or extra details unless asked. Limit to 1-2 sentences max. Be concise and engaging."},
-            {"role": "user", "content": user_text},
-        ]
+
+        self.conversation_history.append({"role": "user", "content": user_text})
+        messages.extend(self.conversation_history)
+        print(f"messages is {messages}")
+
 
         # 调用接口
         response_generator = self.brain_model.create_chat_completion(
